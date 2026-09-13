@@ -27,6 +27,10 @@ jobs:
             pod install
           fi
 
+      - name: List available schemes
+        run: |
+          xcodebuild -project WalkWrite.xcodeproj -list
+
       - name: Build Archive
         run: |
           xcodebuild archive \
@@ -34,7 +38,10 @@ jobs:
             -scheme WalkWrite \
             -configuration Release \
             -archivePath build/WalkWrite.xcarchive \
-            -allowProvisioningUpdates
+            -allowProvisioningUpdates \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO
+            
 
       - name: Export IPA
         run: |
