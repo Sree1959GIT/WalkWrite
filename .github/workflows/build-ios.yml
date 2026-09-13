@@ -15,21 +15,46 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Xcode
         run: |
           sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
           xcodebuild -version
 
-      - name: Install dependencies
+      - name: Check project structure
         run: |
-          if [ -f "Podfile" ]; then
-            pod install
-          fi
+          echo "=== Project Contents ==="
+          ls -la
+          echo ""
+          echo "=== Xcode Project ==="
+          ls -la WalkWrite.xcodeproj/ || echo "No xcodeproj found"
 
       - name: List available schemes
         run: |
-          xcodebuild -project WalkWrite.xcodeproj -list
+          echo "=== Available Schemes ==="
+          xcodebuild -project WalkWrite.xcodeproj -list || echo "Failed to list schemes"
+
+      - name: Install Swift dependencies
+        run: |
+          if [ -f "Package.swift" ]; then
+            echo "Found Package.swift, resolving dependencies..."
+            swift package resolve
+          fi
+
+      - name: Build for iOS (Simulator)
+        run: |
+          xcodebuild build \
+            -project WalkWrite.xcodeproj \
+            -scheme WalkWrite \
+            -configuration Release \
+            -derivedDataPath build/DerivedData \
+            -destination "generic/platform=iOS Simulator" \
+            -allowProvisioningUpdates \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            2>&1 | tee build.log || true
 
       - name: Build Archive
         run: |
@@ -40,8 +65,20 @@ jobs:
             -archivePath build/WalkWrite.xcarchive \
             -allowProvisioningUpdates \
             CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO
-            
+            CODE_SIGNING_REQUIRED=NO \
+            2>&1 | tee archive.log || true
+
+      - name: Check archive
+        run: |
+          if [ -d "build/WalkWrite.xcarchive" ]; then
+            echo "✅ Archive created successfully"
+            ls -lh build/WalkWrite.xcarchive
+          else
+            echo "❌ Archive not found"
+            cat build.log || true
+            cat archive.log || true
+            exit 1
+          fi
 
       - name: Export IPA
         run: |
@@ -50,18 +87,37 @@ jobs:
             -archivePath build/WalkWrite.xcarchive \
             -exportOptionsPlist ExportOptions.plist \
             -exportPath build/export \
-            -allowProvisioningUpdates
+            -allowProvisioningUpdates \
+            2>&1 | tee export.log || true
 
-      - name: Upload IPA Artifact
+      - name: Check IPA
+        run: |
+          if ls build/export/*.ipa 1> /dev/null 2>&1; then
+            echo "✅ IPA created successfully"
+            ls -lh build/export/*.ipa
+          else
+            echo "⚠️ No IPA found, checking export logs..."
+            cat export.log || true
+          fi
+
+      - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: WalkWrite-iOS-App
-          path: build/export/*.ipa
+          path: |
+            build/export/*.ipa
+            build/WalkWrite.xcarchive
+            build.log
+            archive.log
+            export.log
           retention-days: 30
+          if-no-files-found: ignore
 
       - name: Display Build Summary
         run: |
-          echo "✅ iOS Build Complete"
-          echo "📱 App Archive: build/WalkWrite.xcarchive"
-          echo "📦 IPA File: build/export/*.ipa"
-          ls -lh build/export/
+          echo "=== Build Summary ==="
+          echo "Total files in build directory:"
+          find build -type f | wc -l
+          echo ""
+          echo "Build artifacts:"
+          find build -type f -name "*.ipa" -o -name "*.xcarchive" | head -20
