@@ -1,0 +1,60 @@
+name: iOS Build and Archive
+
+on:
+  push:
+    branches: [ main, ci/add-build-workflow ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build iOS App
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        run: |
+          sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Install dependencies
+        run: |
+          if [ -f "Podfile" ]; then
+            pod install
+          fi
+
+      - name: Build Archive
+        run: |
+          xcodebuild archive \
+            -project WalkWrite.xcodeproj \
+            -scheme WalkWrite \
+            -configuration Release \
+            -archivePath build/WalkWrite.xcarchive \
+            -allowProvisioningUpdates
+
+      - name: Export IPA
+        run: |
+          mkdir -p build/export
+          xcodebuild -exportArchive \
+            -archivePath build/WalkWrite.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath build/export \
+            -allowProvisioningUpdates
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: WalkWrite-iOS-App
+          path: build/export/*.ipa
+          retention-days: 30
+
+      - name: Display Build Summary
+        run: |
+          echo "✅ iOS Build Complete"
+          echo "📱 App Archive: build/WalkWrite.xcarchive"
+          echo "📦 IPA File: build/export/*.ipa"
+          ls -lh build/export/
