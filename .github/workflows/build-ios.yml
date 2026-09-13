@@ -46,7 +46,7 @@ jobs:
             -allowProvisioningUpdates
 
       - name: Upload IPA Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: WalkWrite-iOS-App
           path: build/export/*.ipa
